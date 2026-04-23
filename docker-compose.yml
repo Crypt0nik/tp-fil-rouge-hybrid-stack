@@ -1,0 +1,138 @@
+services:
+  db_mongo:
+    build:
+      context: ./mongo
+      dockerfile: Dockerfile
+    image: crypt0nik/tp-fil-rouge-mongo:1.0.0
+    restart: unless-stopped
+    environment:
+      MONGODB_INITDB_ROOT_USERNAME: ${MONGODB_INITDB_ROOT_USERNAME}
+      MONGODB_INITDB_ROOT_PASSWORD: ${MONGODB_INITDB_ROOT_PASSWORD}
+      MONGODB_INITDB_DATABASE: ${MONGODB_INITDB_DATABASE}
+      MONGODB_HEALTHCHECK_COLLECTION: ${MONGODB_HEALTHCHECK_COLLECTION}
+      MONGODB_EXPECTED_POST_COUNT: ${MONGODB_EXPECTED_POST_COUNT}
+    volumes:
+      - mongo_data:/data/db
+    networks:
+      - backend
+    healthcheck:
+      test: ["CMD-SHELL", "mongosh --quiet -u \"$$MONGODB_INITDB_ROOT_USERNAME\" -p \"$$MONGODB_INITDB_ROOT_PASSWORD\" --authenticationDatabase admin --eval \"const count = db.getSiblingDB('$$MONGODB_INITDB_DATABASE').getCollection('$$MONGODB_HEALTHCHECK_COLLECTION').countDocuments({}); if (count !== Number($$MONGODB_EXPECTED_POST_COUNT)) { quit(1); }\""]
+      interval: 5s
+      timeout: 5s
+      retries: 10
+      start_period: 20s
+
+  db_mysql:
+    image: mysql:9.6
+    restart: unless-stopped
+    environment:
+      MYSQL_ROOT_PASSWORD: ${MYSQL_ROOT_PASSWORD}
+      MYSQL_DATABASE: ${MYSQL_DATABASE}
+      MYSQL_HEALTHCHECK_HOST: ${MYSQL_HEALTHCHECK_HOST}
+      MYSQL_HEALTHCHECK_USER: ${MYSQL_HEALTHCHECK_USER}
+      MYSQL_HEALTHCHECK_TABLE: ${MYSQL_HEALTHCHECK_TABLE}
+      MYSQL_EXPECTED_USER_COUNT: ${MYSQL_EXPECTED_USER_COUNT}
+    volumes:
+      - ./sqlfiles:/docker-entrypoint-initdb.d:ro
+      - mysql_data:/var/lib/mysql
+    networks:
+      - backend
+    healthcheck:
+      test: ["CMD-SHELL", "mysql -h \"$$MYSQL_HEALTHCHECK_HOST\" -u\"$$MYSQL_HEALTHCHECK_USER\" -p\"$$MYSQL_ROOT_PASSWORD\" -D \"$$MYSQL_DATABASE\" --batch --skip-column-names -e \"SELECT COUNT(*) FROM $$MYSQL_HEALTHCHECK_TABLE;\" | grep -qx \"$$MYSQL_EXPECTED_USER_COUNT\""]
+      interval: 5s
+      timeout: 5s
+      retries: 10
+      start_period: 20s
+
+  admin_mongo:
+    image: mongo-express:1.0.2
+    restart: unless-stopped
+    depends_on:
+      db_mongo:
+        condition: service_healthy
+    environment:
+      ME_CONFIG_MONGODB_ADMINUSERNAME: ${MONGODB_INITDB_ROOT_USERNAME}
+      ME_CONFIG_MONGODB_ADMINPASSWORD: ${MONGODB_INITDB_ROOT_PASSWORD}
+      ME_CONFIG_MONGODB_URL: ${MONGO_URL}
+      ME_CONFIG_BASICAUTH_USERNAME: ${ADMIN_MONGO_BASICAUTH_USERNAME}
+      ME_CONFIG_BASICAUTH_PASSWORD: ${ADMIN_MONGO_BASICAUTH_PASSWORD}
+      ADMIN_MONGO_HEALTHCHECK_URL: ${ADMIN_MONGO_HEALTHCHECK_URL}
+    ports:
+      - "${ADMIN_MONGO_PORT}:8081"
+    networks:
+      - backend
+      - frontend
+    healthcheck:
+      test: ["CMD", "node", "-e", "const http=require('http'); const creds=process.env.ME_CONFIG_BASICAUTH_USERNAME + ':' + process.env.ME_CONFIG_BASICAUTH_PASSWORD; const auth=Buffer.from(creds).toString('base64'); const req=http.request(process.env.ADMIN_MONGO_HEALTHCHECK_URL,{headers:{Authorization:'Basic ' + auth}},(res)=>process.exit(res.statusCode===200?0:1)); req.on('error',()=>process.exit(1)); req.end();"]
+      interval: 5s
+      timeout: 5s
+      retries: 10
+      start_period: 20s
+
+  admin_mysql:
+    image: adminer:5.4.2
+    restart: unless-stopped
+    depends_on:
+      db_mysql:
+        condition: service_healthy
+    environment:
+      ADMIN_MYSQL_HEALTHCHECK_URL: ${ADMIN_MYSQL_HEALTHCHECK_URL}
+      ADMIN_MYSQL_HEALTHCHECK_TEXT: ${ADMIN_MYSQL_HEALTHCHECK_TEXT}
+    ports:
+      - "${ADMIN_MYSQL_PORT}:8080"
+    networks:
+      - backend
+      - frontend
+    healthcheck:
+      test: ["CMD-SHELL", "curl -fsS \"$$ADMIN_MYSQL_HEALTHCHECK_URL\" | grep -qi \"$$ADMIN_MYSQL_HEALTHCHECK_TEXT\""]
+      interval: 5s
+      timeout: 5s
+      retries: 10
+      start_period: 20s
+
+  api:
+    build:
+      context: ./api
+      dockerfile: Dockerfile
+    image: crypt0nik/tp-fil-rouge-api:1.0.0
+    restart: unless-stopped
+    volumes:
+      - ./api:/app
+    depends_on:
+      db_mongo:
+        condition: service_healthy
+      db_mysql:
+        condition: service_healthy
+    environment:
+      MONGO_URL: ${MONGO_URL}
+      MONGO_DATABASE: ${MONGO_DATABASE}
+      MYSQL_HOST: ${MYSQL_HOST}
+      MYSQL_PORT: ${MYSQL_PORT}
+      MYSQL_DATABASE: ${MYSQL_DATABASE}
+      MYSQL_USER: ${MYSQL_USER}
+      MYSQL_ROOT_PASSWORD: ${MYSQL_ROOT_PASSWORD}
+      MONGODB_EXPECTED_POST_COUNT: ${MONGODB_EXPECTED_POST_COUNT}
+      MYSQL_EXPECTED_USER_COUNT: ${MYSQL_EXPECTED_USER_COUNT}
+      API_HEALTHCHECK_POSTS_URL: ${API_HEALTHCHECK_POSTS_URL}
+      API_HEALTHCHECK_USERS_URL: ${API_HEALTHCHECK_USERS_URL}
+    command: uvicorn main:app --proxy-headers --host 0.0.0.0 --port 8000
+    ports:
+      - "${API_PORT}:8000"
+    networks:
+      - backend
+      - frontend
+    healthcheck:
+      test: ["CMD-SHELL", "python -c \"import json, os, urllib.request; posts=json.load(urllib.request.urlopen(os.environ['API_HEALTHCHECK_POSTS_URL'])); users=json.load(urllib.request.urlopen(os.environ['API_HEALTHCHECK_USERS_URL'])); raise SystemExit(0 if len(posts.get('posts', [])) == int(os.environ['MONGODB_EXPECTED_POST_COUNT']) and len(users.get('users', [])) == int(os.environ['MYSQL_EXPECTED_USER_COUNT']) else 1)\""]
+      interval: 5s
+      timeout: 5s
+      retries: 10
+      start_period: 20s
+
+networks:
+  backend:
+    internal: true
+  frontend:
+
+volumes:
+  mongo_data:
+  mysql_data:
