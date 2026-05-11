@@ -17,4 +17,4 @@ jobs:
         uses: docker/setup-buildx-action@v3
 
       - name: Build image for scanning
-        run: docker build -t my-app:1.0.0 -f ./mongo/Dockerfile .
+        run: docker build -t my-app:1.0.0 -f ./mongo/Dockerfile ./mongo
