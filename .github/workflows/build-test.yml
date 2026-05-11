@@ -35,3 +35,12 @@ jobs:
           only-severities: critical,high
           only-fixed: true
           exit-code: true
+          
+  deploy_test:
+    needs: build_test
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v4
+      - name: Build the stack
+        run: docker compose up -d
