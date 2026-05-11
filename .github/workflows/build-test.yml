@@ -1,35 +1,36 @@
 name: Build and niktoi
-
 on:
   push:
     branches: [ main ]
   pull_request:
     branches: [ main ]
-
 jobs:
   build_test:
     runs-on: ubuntu-latest
+    strategy:
+      fail-fast: false
+      matrix:
+        include:
+          - service: mongo
+            context: ./mongo
+          - service: api
+            context: ./api
     steps:
       - name: Checkout code
         uses: actions/checkout@v4
-
       - name: Set up Docker Buildx
         uses: docker/setup-buildx-action@v3
-
       - name: Build image for scanning
-        run: docker build -t my-app:1.0.0 -f ./mongo/Dockerfile ./mongo
-
+        run: docker build -t my-app-${{ matrix.service }}:1.0.0 ${{ matrix.context }}
       - name: Login to Docker Hub
         uses: docker/login-action@v4
         with:
           username: ${{ secrets.DOCKERHUB_USERNAME }}
           password: ${{ secrets.DOCKERHUB_TOKEN }}
-
       - name: Docker Scout Scan
-      uses: docker/scout-action@v1
-      with:
-      command: cves, recommendations
-      image: my-app:1.0.0
-      files: ./mongo/Dockerfile ./mongo
-      only-seventies: critical,high
-      exit-code: true 
+        uses: docker/scout-action@v1
+        with:
+          command: cves,recommendations
+          image: my-app-${{ matrix.service }}:1.0.0
+          only-severities: critical,high
+          exit-code: true
