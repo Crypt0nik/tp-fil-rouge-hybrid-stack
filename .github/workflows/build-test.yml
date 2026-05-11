@@ -33,4 +33,5 @@ jobs:
           command: cves,recommendations
           image: my-app-${{ matrix.service }}:1.0.0
           only-severities: critical,high
+          only-fixed: true
           exit-code: true
