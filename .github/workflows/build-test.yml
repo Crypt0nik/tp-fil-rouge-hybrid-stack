@@ -39,19 +39,41 @@ jobs:
   deploy_test:
     needs: build_test
     runs-on: ubuntu-latest
+    env:
+      MONGODB_INITDB_ROOT_USERNAME: ${{ secrets.MONGODB_INITDB_ROOT_USERNAME }}
+      MONGODB_INITDB_ROOT_PASSWORD: ${{ secrets.MONGODB_INITDB_ROOT_PASSWORD }}
+      MONGODB_INITDB_DATABASE: ${{ secrets.MONGODB_INITDB_DATABASE }}
+      MONGODB_HEALTHCHECK_COLLECTION: ${{ secrets.MONGODB_HEALTHCHECK_COLLECTION }}
+      MONGODB_EXPECTED_POST_COUNT: ${{ secrets.MONGODB_EXPECTED_POST_COUNT }}
+      MYSQL_ROOT_PASSWORD: ${{ secrets.MYSQL_ROOT_PASSWORD }}
+      MYSQL_DATABASE: ${{ secrets.MYSQL_DATABASE }}
+      MYSQL_USER: ${{ secrets.MYSQL_USER }}
+      MYSQL_HOST: ${{ secrets.MYSQL_HOST }}
+      MYSQL_PORT: ${{ secrets.MYSQL_PORT }}
+      MYSQL_HEALTHCHECK_HOST: ${{ secrets.MYSQL_HEALTHCHECK_HOST }}
+      MYSQL_HEALTHCHECK_USER: ${{ secrets.MYSQL_HEALTHCHECK_USER }}
+      MYSQL_HEALTHCHECK_TABLE: ${{ secrets.MYSQL_HEALTHCHECK_TABLE }}
+      MYSQL_EXPECTED_USER_COUNT: ${{ secrets.MYSQL_EXPECTED_USER_COUNT }}
+      ADMIN_MONGO_PORT: ${{ secrets.ADMIN_MONGO_PORT }}
+      ADMIN_MONGO_BASICAUTH_USERNAME: ${{ secrets.ADMIN_MONGO_BASICAUTH_USERNAME }}
+      ADMIN_MONGO_BASICAUTH_PASSWORD: ${{ secrets.ADMIN_MONGO_BASICAUTH_PASSWORD }}
+      ADMIN_MONGO_HEALTHCHECK_URL: ${{ secrets.ADMIN_MONGO_HEALTHCHECK_URL }}
+      ADMIN_MYSQL_PORT: ${{ secrets.ADMIN_MYSQL_PORT }}
+      ADMIN_MYSQL_HEALTHCHECK_URL: ${{ secrets.ADMIN_MYSQL_HEALTHCHECK_URL }}
+      ADMIN_MYSQL_HEALTHCHECK_TEXT: ${{ secrets.ADMIN_MYSQL_HEALTHCHECK_TEXT }}
+      API_PORT: ${{ secrets.API_PORT }}
+      API_HEALTHCHECK_POSTS_URL: ${{ secrets.API_HEALTHCHECK_POSTS_URL }}
+      API_HEALTHCHECK_USERS_URL: ${{ secrets.API_HEALTHCHECK_USERS_URL }}
+      MONGO_DATABASE: ${{ secrets.MONGO_DATABASE }}
+      MONGO_URL: ${{ secrets.MONGO_URL }}
     steps:
       - name: Checkout code
         uses: actions/checkout@v4
-      - name: Prepare environment file
-        run: cp .env.example .env
       - name: Build the stack
         run: docker compose up -d
       - name: Show logs on failure
         if: failure()
         run: |
-          echo "=== docker compose ps ==="
           docker compose ps
-          echo "=== MySQL logs ==="
           docker compose logs db_mysql
-          echo "=== Mongo logs ==="
           docker compose logs db_mongo
