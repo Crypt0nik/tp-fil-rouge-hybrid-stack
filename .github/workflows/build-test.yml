@@ -36,7 +36,7 @@ jobs:
           only-fixed: true
           exit-code: true
           
-deploy_test:
+  deploy_test:
     needs: build_test
     runs-on: ubuntu-latest
     steps:
